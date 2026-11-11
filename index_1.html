@@ -18,7 +18,8 @@ details.c{margin-bottom:12px}summary{cursor:pointer;color:var(--mu)}
 #card{background:var(--card);padding:22px;border-radius:14px;border:1px solid var(--bd)}
 #card h2{margin:0;font-size:20px}#card .sub{color:var(--mu);margin-bottom:14px}
 .k{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
-.k div{border:1px solid var(--bd);border-radius:10px;padding:10px}.k b{display:block;font-size:24px}.k span{color:var(--mu);font-size:12px}
+.k div{border:1px solid var(--bd);border-radius:10px;padding:10px}
+.k div div{border:0;padding:0;border-radius:0}.k b{display:block;font-size:24px}.k span{color:var(--mu);font-size:12px}
 .g{display:inline-block;min-width:26px;text-align:center;border-radius:6px;color:#fff!important;font-size:14px;line-height:22px;vertical-align:middle;font-weight:700;padding:0 6px}
 .gA{background:var(--A)}.gB{background:var(--B)}.gC{background:var(--C)}.gD{background:var(--D)}
 .chart{display:flex;align-items:flex-end;gap:6px;height:150px;margin-bottom:16px;border-bottom:1px solid var(--bd)}
@@ -31,11 +32,13 @@ th{color:var(--mu);font-weight:600;font-size:12px}.tbl{overflow-x:auto}.mu{color
 
 <details class="c" id="cfg"><summary>Cấu hình và dán báo cáo</summary>
   <div class="bar" style="margin-top:10px"><input id="api" placeholder="URL Web App Apps Script" style="flex:1;min-width:220px">
-  <input id="tok" type="password" placeholder="Token" style="width:140px"><button class="pri" id="go">Tải dữ liệu</button></div>
+  <input id="tok" type="password" placeholder="Token" style="width:140px">
+  <input id="tokcn" type="password" placeholder="Token cá nhân (tùy chọn)" style="width:190px"><button class="pri" id="go">Tải dữ liệu</button></div>
   <textarea id="paste" rows="4" style="width:100%;font:12px monospace" placeholder='Dán khối {"items":[...]} từ Claude vào đây'></textarea>
   <div class="bar" style="margin-top:6px"><button class="pri" id="send">Gửi lên Sheet</button><span class="mu" id="sst"></span></div>
 </details>
 
+<div class="bar"><div class="seg" id="tab"><button data-t="ld" class="on">Báo cáo lãnh đạo</button><button data-t="cn">🔒 Phát triển cá nhân</button></div></div>
 <div class="bar">
   <div class="seg" id="seg"><button data-k="ngay" class="on">Ngày</button><button data-k="tuan">Tuần</button><button data-k="thang">Tháng</button></div>
   <button id="prev">‹</button><input id="d" type="date"><button id="next">›</button>
@@ -58,14 +61,28 @@ const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const parse=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
 const vn=s=>{const[y,m,d]=s.split('-');return `${d}/${m}/${y}`};
 const THU=['CN','T2','T3','T4','T5','T6','T7'];
-let ITEMS=[],KY='ngay';
-$('api').value=ls.get('api');$('tok').value=ls.get('tok');$('d').value=iso(new Date());
+let ITEMS=[],KY='ngay',TAB='ld';
+const laRT=i=>i.rieng_tu===true||String(i.rieng_tu).toLowerCase()==='true';
+$('api').value=ls.get('api');$('tok').value=ls.get('tok');$('tokcn').value=ls.get('tokcn');$('d').value=iso(new Date());
 if(!$('api').value)$('cfg').open=true;
 
-function diemTB(list){ // trung bình có trọng số theo phút, thiếu thì 30
-  if(!list.length)return 0;let t=0,w=0;
-  list.forEach(i=>{const ts=+i.thoi_gian_phut>0?+i.thoi_gian_phut:30;t+=(+i.diem)*ts;w+=ts});
-  return Math.round(t/w);
+// Cùng mô hình với Code.gs: 60% chất lượng + 40% khối lượng (50% giờ, 50% đơn vị việc theo độ khó)
+const DM={gio_ngay:8,don_vi_ngay:3,cl:0.6};
+function chamKy(list,n){
+  n=Math.max(1,n||1);
+  if(!list.length)return{diem:0,cl:0,kl:0,gio:0,dv:0};
+  let t=0,w=0,ph=0,dv=0;
+  list.forEach(i=>{const ts=+i.thoi_gian_phut>0?+i.thoi_gian_phut:30;t+=(+i.diem)*ts;w+=ts;ph+=+i.thoi_gian_phut||0;
+    const k=Math.min(5,Math.max(1,+i.do_kho||3))/3;dv+=i.trang_thai==='hoan_thanh'?k:i.trang_thai==='dang_lam'?k/2:0});
+  const cl=t/w,kl=100*(0.5*Math.min(1,ph/60/(DM.gio_ngay*n))+0.5*Math.min(1,dv/(DM.don_vi_ngay*n)));
+  return{diem:Math.round(DM.cl*cl+(1-DM.cl)*kl),cl:Math.round(cl),kl:Math.round(kl),gio:ph/60,dv:Math.round(dv*10)/10};
+}
+// số ngày làm việc trong kỳ: T2 đến T7 tính đến hôm nay, cộng Chủ nhật có làm việc
+function soNgayLV(s,e,list){
+  const today=iso(new Date());let n=0;
+  for(let d=new Date(s);d<=e;d.setDate(d.getDate()+1)){const k=iso(d);
+    if(k>today)break; if(d.getDay()!==0||list.some(i=>i.ngay===k))n++;}
+  return Math.max(1,n);
 }
 function khoang(){
   const d=parse($('d').value);
@@ -79,10 +96,10 @@ function tieuDe(s,e){
   return`Tháng ${pad(s.getMonth()+1)}/${s.getFullYear()}`;
 }
 async function load(){
-  ls.set('api',$('api').value.trim());ls.set('tok',$('tok').value);
+  ls.set('api',$('api').value.trim());ls.set('tok',$('tok').value);ls.set('tokcn',$('tokcn').value);
   if(!$('api').value){$('st').textContent='Mở "Cấu hình" để nhập URL Web App và Token.';return render()}
   $('st').textContent='Đang tải...';
-  try{const r=await (await fetch($('api').value.trim()+'?'+new URLSearchParams({token:$('tok').value}))).json();
+  try{const r=await (await fetch($('api').value.trim()+'?'+new URLSearchParams({token:$('tok').value,token_cn:$('tokcn').value}))).json();
     if(!r.ok)throw new Error(r.error);
     ITEMS=r.items.map(i=>({...i,ngay:String(i.ngay).slice(0,10)}));
     $('st').textContent='Dữ liệu cập nhật lúc '+new Date().toLocaleString('vi-VN');$('cfg').open=false;
@@ -90,9 +107,11 @@ async function load(){
   render();
 }
 function render(){
+  $('png').style.display=TAB==='cn'?'none':'';
+  if(TAB==='cn')return renderCN();
   const[s,e]=khoang(),a=iso(s),b=iso(e);
-  const list=ITEMS.filter(i=>i.ngay>=a&&i.ngay<=b).sort((x,y)=>x.ngay.localeCompare(y.ngay));
-  const diem=diemTB(list),h=list.length?hang(diem):'-';
+  const list=ITEMS.filter(i=>i.ngay>=a&&i.ngay<=b&&!laRT(i)).sort((x,y)=>x.ngay.localeCompare(y.ngay));
+  const nLV=KY==='ngay'?1:soNgayLV(s,e,list),K=chamKy(list,nLV),diem=K.diem,h=list.length?hang(diem):'-';
   const phut=list.reduce((t,i)=>t+(+i.thoi_gian_phut||0),0);
   const dem={A:0,B:0,C:0,D:0};list.forEach(i=>dem[i.hang]=(dem[i.hang]||0)+1);
   const xong=list.filter(i=>i.trang_thai==='hoan_thanh').length;
@@ -100,15 +119,16 @@ function render(){
   let cols=[];
   if(KY==='ngay')cols=list.map((i,n)=>({lb:'#'+(n+1),v:+i.diem,h:i.hang,t:i.viec}));
   else for(let d=new Date(s);d<=e;d.setDate(d.getDate()+1)){
-    const k=iso(d),l=list.filter(i=>i.ngay===k),v=diemTB(l);
+    const k=iso(d),l=list.filter(i=>i.ngay===k),v=chamKy(l,1).diem;
     cols.push({lb:KY==='tuan'?THU[d.getDay()]:d.getDate(),v,h:l.length?hang(v):'',t:`${vn(k)}: ${l.length} việc`});
   }
   $('card').innerHTML=`
   <h2>Báo cáo công việc | ${tieuDe(s,e)}</h2><div class="sub">Người báo cáo: Ngô Đại Sơn</div>
   <div class="k">
     <div><b>${list.length?diem:'-'} ${list.length?g(h):''}</b><span>Điểm ${KY==='ngay'?'ngày':KY==='tuan'?'tuần':'tháng'}</span></div>
-    <div><b>${list.length}</b><span>Số việc (${xong} hoàn thành)</span></div>
-    <div><b>${(phut/60).toFixed(1)}h</b><span>Tổng thời gian</span></div>
+    <div><b>${K.cl}</b><span>Chất lượng (60%)</span></div>
+    <div><b>${K.kl}</b><span>Khối lượng (40%): ${(phut/60).toFixed(1)}/${DM.gio_ngay*nLV} giờ, ${K.dv}/${DM.don_vi_ngay*nLV} đơn vị việc</span></div>
+    <div><b>${list.length}</b><span>Số việc (${xong} hoàn thành)${KY==='ngay'?'':', '+nLV+' ngày làm việc'}</span></div>
     <div><b style="font-size:16px;padding-top:6px">${['A','B','C','D'].map(x=>g(x)+' '+dem[x]).join(' ')}</b><span>Phân bố hạng</span></div>
   </div>
   ${cols.length?`<div class="chart">${cols.map(c=>`<div class="col" title="${esc(c.t)}">${c.h?c.v:''}<i class="g${c.h||'X'}" style="height:${c.h?c.v:0}%"></i>${c.lb}</div>`).join('')}</div>`:''}
@@ -116,7 +136,7 @@ function render(){
   ${list.map((i,n)=>`<tr><td>${KY==='ngay'?n+1:vn(i.ngay).slice(0,5)}</td><td>${esc(i.du_an)}</td><td>${esc(i.viec)}</td><td>${esc(i.ket_qua)}</td><td>${esc(i.thoi_gian_phut)}</td><td>${esc(i.diem)}</td><td>${g(i.hang)}</td></tr>`).join('')
    ||'<tr><td colspan="7" class="mu">Không có việc nào trong kỳ này</td></tr>'}
   </tbody></table></div>
-  <div class="foot">Thang điểm 100: hoàn thành 30, đúng hạn 20, chất lượng 20, độ khó và tác động 20, sản phẩm bàn giao 10. Hạng A ≥ 85, B ≥ 70, C ≥ 50, D &lt; 50. Xuất lúc ${new Date().toLocaleString('vi-VN')}</div>`;
+  <div class="foot">Điểm kỳ = 60% Chất lượng + 40% Khối lượng. Chất lượng: trung bình điểm việc (hoàn thành 30, đúng hạn 20, ít sửa 20, độ khó và tác động 20, sản phẩm 10). Khối lượng: 50% giờ làm so định mức 8 giờ/ngày, 50% đơn vị việc so định mức 3/ngày (việc hoàn thành = độ khó/3). Hạng A ≥ 85, B ≥ 70, C ≥ 50, D &lt; 50. Xuất lúc ${new Date().toLocaleString('vi-VN')}</div>`;
 }
 function dich(n){const d=parse($('d').value);
   if(KY==='ngay')d.setDate(d.getDate()+n);else if(KY==='tuan')d.setDate(d.getDate()+7*n);else d.setMonth(d.getMonth()+n,1);
@@ -125,6 +145,56 @@ $('seg').onclick=e=>{const k=e.target.dataset.k;if(!k)return;KY=k;[...$('seg').c
 $('prev').onclick=()=>dich(-1);$('next').onclick=()=>dich(1);$('d').onchange=render;
 $('today').onclick=()=>{$('d').value=iso(new Date());render()};
 $('go').onclick=load;
+$('tab').onclick=e=>{const t=e.target.dataset.t;if(!t)return;TAB=t;[...$('tab').children].forEach(b=>b.classList.toggle('on',b===e.target));render()};
+
+/* ===== Tab Phát triển cá nhân: Signal/Noise, Deep Work, Eisenhower, mục tiêu, Pareto ===== */
+const MT={MT1:'Quản trị dự án và đối tác',MT2:'Digital Products',MT3:'Bắn cung, lái xe',MT4:'Chứng khoán',MT5:'Tiết kiệm, thu chi',MT6:'Học thuật, du học Phần Lan'};
+const MUC_SIGNAL=60,MUC_SAU=40; // ngưỡng tham chiếu: >=60% thời gian signal, >=40% thời gian việc sâu
+function renderCN(){
+  const[s,e]=khoang(),a=iso(s),b=iso(e);
+  const list=ITEMS.filter(i=>i.ngay>=a&&i.ngay<=b);
+  const h=i=>(+i.thoi_gian_phut||30)/60, sum=l=>l.reduce((t,i)=>t+h(i),0);
+  const tong=sum(list)||0, coNhan=list.filter(i=>i.signal);
+  const sig=sum(list.filter(i=>i.signal==='signal')), noi=sum(list.filter(i=>i.signal==='noise'));
+  const sau=sum(list.filter(i=>i.do_sau==='sau')), nong=sum(list.filter(i=>i.do_sau==='nong'));
+  const pct=(x,y)=>y?Math.round(100*x/y):0;
+  const pS=pct(sig,sig+noi),pD=pct(sau,sau+nong);
+  const Q={Q1:0,Q2:0,Q3:0,Q4:0};list.forEach(i=>{if(Q[i.eisenhower]!==undefined)Q[i.eisenhower]+=h(i)});
+  const gMT={};Object.keys(MT).forEach(k=>gMT[k]=0);
+  list.forEach(i=>{const ms=String(i.muc_tieu||'').split(',').filter(m=>MT[m]);ms.forEach(m=>gMT[m]+=h(i)/ms.length)});
+  const maxMT=Math.max(1,...Object.values(gMT));
+  // Pareto: giá trị trên mỗi giờ = điểm x tác động / giờ
+  const gt=i=>(+i.diem||0)*(+i.tac_dong||3)/100/h(i);
+  const top=[...list].sort((x,y)=>gt(y)-gt(x)).slice(0,Math.max(1,Math.ceil(list.length*0.2)));
+  const noiseTop=list.filter(i=>i.signal==='noise').sort((x,y)=>h(y)-h(x)).slice(0,3);
+  const thieu=Object.keys(MT).filter(k=>gMT[k]===0);
+  const goiY=[];
+  if(coNhan.length<list.length)goiY.push(`${list.length-coNhan.length} việc chưa có nhãn phân tích (báo cáo cũ), chưa được tính vào tỷ lệ.`);
+  if(pS&&pS<MUC_SIGNAL)goiY.push(`Thời gian signal ${pS}%, dưới mức tham chiếu ${MUC_SIGNAL}%.`);
+  if(pD&&pD<MUC_SAU)goiY.push(`Việc sâu chỉ chiếm ${pD}% thời gian; nên giữ các khối 90 đến 120 phút không bị ngắt.`);
+  noiseTop.forEach(i=>goiY.push(`Cân nhắc giao bớt, chuẩn hóa mẫu hoặc tự động hóa: "${esc(i.viec)}" (${h(i).toFixed(1)} giờ, noise).`));
+  if(Q.Q3>Q.Q2)goiY.push(`Thời gian việc gấp nhưng ít quan trọng (Q3) đang nhiều hơn việc quan trọng không gấp (Q2).`);
+  if(thieu.length)goiY.push(`Chưa có giờ nào cho: ${thieu.map(k=>MT[k]).join('; ')}.`);
+  const tile=(v,l)=>`<div><b>${v}</b><span>${l}</span></div>`;
+  $('card').innerHTML=`
+  <h2>🔒 Phát triển cá nhân | ${tieuDe(s,e)}</h2><div class="sub">Chỉ mình bạn xem, không xuất cho lãnh đạo</div>
+  <div class="k">${tile(pS+'%','Thời gian Signal ('+sig.toFixed(1)+'/'+(sig+noi).toFixed(1)+' giờ)')}
+  ${tile(pD+'%','Việc sâu ('+sau.toFixed(1)+' giờ)')}${tile(Q.Q2.toFixed(1)+'h','Q2: quan trọng, không gấp')}${tile(tong.toFixed(1)+'h','Tổng giờ, '+list.length+' việc')}</div>
+  <div class="k" style="grid-template-columns:1fr 1fr">
+   <div><span>Ma trận Eisenhower (giờ)</span><table style="margin-top:6px"><tr><td></td><td class="mu">Gấp</td><td class="mu">Không gấp</td></tr>
+    <tr><td class="mu">Quan trọng</td><td><b>Q1</b> ${Q.Q1.toFixed(1)}</td><td><b>Q2</b> ${Q.Q2.toFixed(1)}</td></tr>
+    <tr><td class="mu">Ít quan trọng</td><td><b>Q3</b> ${Q.Q3.toFixed(1)}</td><td><b>Q4</b> ${Q.Q4.toFixed(1)}</td></tr></table></div>
+   <div><span>Giờ theo mục tiêu</span>${Object.keys(MT).map(k=>`<div style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:4px"><span style="width:150px">${MT[k]}</span><i style="display:block;height:10px;border-radius:4px;background:var(--pri);width:${Math.round(120*gMT[k]/maxMT)}px"></i>${gMT[k].toFixed(1)}h</div>`).join('')}</div>
+  </div>
+  <div style="margin-bottom:14px"><b>Gợi ý</b><ul>${goiY.map(x=>'<li>'+x+'</li>').join('')||'<li class="mu">Chưa có gợi ý.</li>'}</ul></div>
+  <div class="tbl"><b>Nhóm 20% việc giá trị cao nhất trên mỗi giờ (Pareto)</b><table><thead><tr><th>Ngày</th><th>Dự án</th><th>Việc</th><th>Giờ</th><th>Nhãn</th></tr></thead><tbody>
+  ${top.map(i=>`<tr><td>${vn(i.ngay).slice(0,5)}</td><td>${esc(i.du_an)}</td><td>${esc(i.viec)}</td><td>${h(i).toFixed(1)}</td><td>${esc([i.signal,i.do_sau,i.eisenhower].filter(Boolean).join(' · '))}</td></tr>`).join('')||'<tr><td colspan="5" class="mu">Không có việc</td></tr>'}
+  </tbody></table></div>
+  <div class="tbl" style="margin-top:14px"><b>Toàn bộ việc trong kỳ</b><table><thead><tr><th>Ngày</th><th>Dự án</th><th>Việc</th><th>Giờ</th><th>Signal</th><th>Sâu</th><th>Ô</th><th>Mục tiêu</th><th>Lý do</th></tr></thead><tbody>
+  ${list.sort((x,y)=>x.ngay.localeCompare(y.ngay)).map(i=>`<tr><td>${vn(i.ngay).slice(0,5)}</td><td>${esc(i.du_an)}${laRT(i)?' 🔒':''}</td><td>${esc(i.viec)}</td><td>${h(i).toFixed(1)}</td><td>${esc(i.signal)}</td><td>${esc(i.do_sau)}</td><td>${esc(i.eisenhower)}</td><td>${esc(i.muc_tieu)}</td><td class="mu">${esc(i.ly_do)}</td></tr>`).join('')}
+  </tbody></table></div>
+  <div class="foot">Signal/Noise (Steve Jobs), Deep Work (Cal Newport), ma trận Eisenhower, Pareto 80/20, nhật ký thời gian (Peter Drucker). Ngưỡng tham chiếu: signal ≥ ${MUC_SIGNAL}%, việc sâu ≥ ${MUC_SAU}%.</div>`;
+}
 $('png').onclick=async()=>{
   if(!window.html2canvas)return alert('Chưa tải được thư viện xuất ảnh, kiểm tra mạng.');
   const c=await html2canvas($('card'),{scale:2,backgroundColor:getComputedStyle($('card')).backgroundColor});
