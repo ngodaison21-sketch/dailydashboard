@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Báo cáo công việc hằng ngày</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1d2330;--mu:#6b7385;--bd:#e3e6ec;--A:#1f9d55;--B:#2f6fdb;--C:#d99a00;--D:#d64545}
+@media (prefers-color-scheme:dark){:root{--bg:#14171d;--card:#1d222b;--tx:#e8ebf0;--mu:#97a0b2;--bd:#2c323d}}
+*{box-sizing:border-box}body{margin:0;font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--tx)}
+.w{max-width:1100px;margin:auto;padding:16px}h1{font-size:20px;margin:4px 0 12px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+input,select,button{font:inherit;padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
+button{cursor:pointer;background:var(--B);color:#fff;border:0}
+.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px}
+.c b{display:block;font-size:26px}.c span{color:var(--mu);font-size:12px}
+.g{display:inline-block;min-width:26px;text-align:center;border-radius:6px;color:#fff;font-weight:700;padding:0 6px}
+.gA{background:var(--A)}.gB{background:var(--B)}.gC{background:var(--C)}.gD{background:var(--D)}
+.chart{display:flex;align-items:flex-end;gap:4px;height:140px;overflow-x:auto;padding-top:8px}
+.col{flex:0 0 26px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:10px;color:var(--mu)}
+.col i{width:18px;border-radius:4px 4px 0 0}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--bd);vertical-align:top}
+th{color:var(--mu);font-weight:600;font-size:12px}.tbl{overflow-x:auto}.mu{color:var(--mu)}
+</style></head><body><div class="w">
+<h1>Báo cáo công việc hằng ngày</h1>
+<div class="bar">
+  <input id="api" placeholder="URL Web App Apps Script" style="flex:1;min-width:220px">
+  <input id="tok" type="password" placeholder="Token" style="width:140px">
+  <input id="from" type="date"><input id="to" type="date">
+  <button id="go">Tải dữ liệu</button>
+</div>
+<details class="c" style="margin-bottom:14px"><summary>Dán báo cáo từ Claude</summary>
+<textarea id="paste" rows="5" style="width:100%;margin-top:8px;font:12px monospace;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx)" placeholder='{"items":[...]}'></textarea>
+<button id="send" style="margin-top:6px">Gửi lên Sheet</button> <span class="mu" id="sst"></span></details>
+<div class="k" id="kpi"></div>
+<div class="c" style="margin-bottom:14px"><span>Điểm theo ngày</span><div class="chart" id="chart"></div></div>
+<div class="c"><div class="bar"><select id="fda"><option value="">Tất cả dự án</option></select>
+<select id="fh"><option value="">Mọi hạng</option><option>A</option><option>B</option><option>C</option><option>D</option></select>
+<span class="mu" id="cnt"></span></div>
+<div class="tbl"><table><thead><tr><th>Ngày</th><th>Dự án</th><th>Việc</th><th>Kết quả</th><th>Phút</th><th>Điểm</th><th>Hạng</th></tr></thead><tbody id="tb"></tbody></table></div></div>
+<p class="mu" id="st"></p>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const ls={get(k){try{return localStorage.getItem(k)||''}catch(e){return''}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const g=h=>`<span class="g g${h}">${h}</span>`;
+const today=new Date().toISOString().slice(0,10);
+let DATA={items:[],ngay:[]};
+$('api').value=ls.get('api');$('tok').value=ls.get('tok');
+$('to').value=today;$('from').value=new Date(Date.now()-29*864e5).toISOString().slice(0,10);
+async function load(){
+  ls.set('api',$('api').value.trim());ls.set('tok',$('tok').value);
+  if(!$('api').value)return $('st').textContent='Nhập URL Web App để tải dữ liệu.';
+  $('st').textContent='Đang tải...';
+  const q=new URLSearchParams({token:$('tok').value,from:$('from').value,to:$('to').value});
+  try{const r=await (await fetch($('api').value.trim()+'?'+q)).json();
+    if(!r.ok)throw new Error(r.error);DATA=r;render();$('st').textContent='Cập nhật lúc '+new Date().toLocaleString('vi-VN');
+  }catch(e){$('st').textContent='Lỗi: '+e.message}
+}
+function render(){
+  const n=DATA.ngay, last=n[n.length-1]||{diem:0,hang:'D',so_viec:0,tong_phut:0};
+  const avg=n.length?Math.round(n.reduce((a,b)=>a+b.diem,0)/n.length):0;
+  const dem={A:0,B:0,C:0,D:0};DATA.items.forEach(i=>dem[i.hang]=(dem[i.hang]||0)+1);
+  $('kpi').innerHTML=[
+    [`${last.diem} ${g(last.hang)}`,'Điểm ngày gần nhất ('+(last.ngay||'')+')'],
+    [`${avg} ${g(avg>=85?'A':avg>=70?'B':avg>=50?'C':'D')}`,'Điểm trung bình kỳ'],
+    [DATA.items.length,'Tổng số việc'],
+    [(DATA.items.reduce((a,b)=>a+(+b.thoi_gian_phut||0),0)/60).toFixed(1)+'h','Tổng thời gian'],
+    [`${dem.A}/${dem.B}/${dem.C}/${dem.D}`,'Số việc hạng A/B/C/D']
+  ].map(([b,s])=>`<div class="c"><b>${b}</b><span>${s}</span></div>`).join('');
+  $('chart').innerHTML=n.map(d=>`<div class="col" title="${d.ngay}: ${d.diem} điểm, ${d.so_viec} việc">${d.diem}<i class="g${d.hang}" style="height:${d.diem}%"></i>${d.ngay.slice(8)}</div>`).join('')||'<span class="mu">Chưa có dữ liệu</span>';
+  const das=[...new Set(DATA.items.map(i=>i.du_an))].sort();
+  const cur=$('fda').value;$('fda').innerHTML='<option value="">Tất cả dự án</option>'+das.map(d=>`<option ${d===cur?'selected':''}>${esc(d)}</option>`).join('');
+  table();
+}
+function table(){
+  const rows=DATA.items.filter(i=>(!$('fda').value||i.du_an===$('fda').value)&&(!$('fh').value||i.hang===$('fh').value))
+    .sort((a,b)=>String(b.ngay).localeCompare(a.ngay));
+  $('cnt').textContent=rows.length+' việc';
+  $('tb').innerHTML=rows.map(i=>`<tr><td>${esc(i.ngay)}</td><td>${esc(i.du_an)}</td><td>${i.link_chat?`<a href="${esc(i.link_chat)}" target="_blank">${esc(i.viec)}</a>`:esc(i.viec)}</td><td>${esc(i.ket_qua)}${i.san_pham?`<br><a class="mu" href="${esc(i.san_pham)}" target="_blank">sản phẩm</a>`:''}</td><td>${esc(i.thoi_gian_phut)}</td><td>${esc(i.diem)}</td><td>${g(i.hang)}</td></tr>`).join('');
+}
+$('send').onclick=async()=>{
+  try{const body=JSON.parse($('paste').value);body.token=$('tok').value;
+    const u=$('api').value.trim()+'?'+new URLSearchParams({action:'add',data:JSON.stringify(body)});
+    const r=await (await fetch(u)).json();
+    $('sst').textContent=r.ok?'Đã gửi '+r.saved.length+' việc: '+r.saved.map(s=>s.hang).join(', '):'Lỗi: '+(r.error||JSON.stringify(r.errors));
+    if(r.ok){$('paste').value='';load();}
+  }catch(e){$('sst').textContent='Lỗi: '+e.message}};
+$('go').onclick=load;$('fda').onchange=table;$('fh').onchange=table;
+if($('api').value)load();
+</script></body></html>
