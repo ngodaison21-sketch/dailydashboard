@@ -1,41 +1,47 @@
 <!doctype html>
 <html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Báo cáo công việc hằng ngày</title>
+<title>Báo cáo công việc</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--tx:#1d2330;--mu:#6b7385;--bd:#e3e6ec;--A:#1f9d55;--B:#2f6fdb;--C:#d99a00;--D:#d64545}
-@media (prefers-color-scheme:dark){:root{--bg:#14171d;--card:#1d222b;--tx:#e8ebf0;--mu:#97a0b2;--bd:#2c323d}}
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1d2330;--mu:#6b7385;--bd:#e3e6ec;--pri:#2f6fdb;--A:#1f9d55;--B:#2f6fdb;--C:#d99a00;--D:#d64545}
 *{box-sizing:border-box}body{margin:0;font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--tx)}
-.w{max-width:1100px;margin:auto;padding:16px}h1{font-size:20px;margin:4px 0 12px}
-.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
-input,select,button{font:inherit;padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
-button{cursor:pointer;background:var(--B);color:#fff;border:0}
-.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
-.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px}
-.c b{display:block;font-size:26px}.c span{color:var(--mu);font-size:12px}
-.g{display:inline-block;min-width:26px;text-align:center;border-radius:6px;color:#fff;font-weight:700;padding:0 6px}
+.w{max-width:1000px;margin:auto;padding:16px}
+input,select,button,textarea{font:inherit;padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff;color:var(--tx)}
+button{cursor:pointer}.pri{background:var(--pri);color:#fff;border:0}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+details.c{margin-bottom:12px}summary{cursor:pointer;color:var(--mu)}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
+.seg{display:inline-flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:#fff}.seg button.on{background:var(--pri);color:#fff}
+#card{background:#fff;padding:22px;border-radius:14px;border:1px solid var(--bd)}
+#card h2{margin:0;font-size:20px}#card .sub{color:var(--mu);margin-bottom:14px}
+.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+.k div{border:1px solid var(--bd);border-radius:10px;padding:10px}.k b{display:block;font-size:24px}.k span{color:var(--mu);font-size:12px}
+.g{display:inline-block;min-width:26px;text-align:center;border-radius:6px;color:#fff!important;font-size:14px;line-height:22px;vertical-align:middle;font-weight:700;padding:0 6px}
 .gA{background:var(--A)}.gB{background:var(--B)}.gC{background:var(--C)}.gD{background:var(--D)}
-.chart{display:flex;align-items:flex-end;gap:4px;height:140px;overflow-x:auto;padding-top:8px}
-.col{flex:0 0 26px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:10px;color:var(--mu)}
-.col i{width:18px;border-radius:4px 4px 0 0}
+.chart{display:flex;align-items:flex-end;gap:6px;height:150px;margin-bottom:16px;border-bottom:1px solid var(--bd)}
+.col{flex:1;max-width:44px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:10px;color:var(--mu)}
+.col i{width:70%;border-radius:4px 4px 0 0;min-height:2px}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--bd);vertical-align:top}
 th{color:var(--mu);font-weight:600;font-size:12px}.tbl{overflow-x:auto}.mu{color:var(--mu)}
+.foot{color:var(--mu);font-size:11px;margin-top:10px}
 </style></head><body><div class="w">
-<h1>Báo cáo công việc hằng ngày</h1>
+
+<details class="c" id="cfg"><summary>Cấu hình và dán báo cáo</summary>
+  <div class="bar" style="margin-top:10px"><input id="api" placeholder="URL Web App Apps Script" style="flex:1;min-width:220px">
+  <input id="tok" type="password" placeholder="Token" style="width:140px"><button class="pri" id="go">Tải dữ liệu</button></div>
+  <textarea id="paste" rows="4" style="width:100%;font:12px monospace" placeholder='Dán khối {"items":[...]} từ Claude vào đây'></textarea>
+  <div class="bar" style="margin-top:6px"><button class="pri" id="send">Gửi lên Sheet</button><span class="mu" id="sst"></span></div>
+</details>
+
 <div class="bar">
-  <input id="api" placeholder="URL Web App Apps Script" style="flex:1;min-width:220px">
-  <input id="tok" type="password" placeholder="Token" style="width:140px">
-  <input id="from" type="date"><input id="to" type="date">
-  <button id="go">Tải dữ liệu</button>
+  <div class="seg" id="seg"><button data-k="ngay" class="on">Ngày</button><button data-k="tuan">Tuần</button><button data-k="thang">Tháng</button></div>
+  <button id="prev">‹</button><input id="d" type="date"><button id="next">›</button>
+  <button id="today">Hôm nay</button>
+  <button class="pri" id="png" style="margin-left:auto">Xuất ảnh PNG</button>
 </div>
-<details class="c" style="margin-bottom:14px"><summary>Dán báo cáo từ Claude</summary>
-<textarea id="paste" rows="5" style="width:100%;margin-top:8px;font:12px monospace;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx)" placeholder='{"items":[...]}'></textarea>
-<button id="send" style="margin-top:6px">Gửi lên Sheet</button> <span class="mu" id="sst"></span></details>
-<div class="k" id="kpi"></div>
-<div class="c" style="margin-bottom:14px"><span>Điểm theo ngày</span><div class="chart" id="chart"></div></div>
-<div class="c"><div class="bar"><select id="fda"><option value="">Tất cả dự án</option></select>
-<select id="fh"><option value="">Mọi hạng</option><option>A</option><option>B</option><option>C</option><option>D</option></select>
-<span class="mu" id="cnt"></span></div>
-<div class="tbl"><table><thead><tr><th>Ngày</th><th>Dự án</th><th>Việc</th><th>Kết quả</th><th>Phút</th><th>Điểm</th><th>Hạng</th></tr></thead><tbody id="tb"></tbody></table></div></div>
+
+<div id="card"></div>
 <p class="mu" id="st"></p>
 </div>
 <script>
@@ -43,48 +49,91 @@ const $=id=>document.getElementById(id);
 const ls={get(k){try{return localStorage.getItem(k)||''}catch(e){return''}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const g=h=>`<span class="g g${h}">${h}</span>`;
-const today=new Date().toISOString().slice(0,10);
-let DATA={items:[],ngay:[]};
-$('api').value=ls.get('api');$('tok').value=ls.get('tok');
-$('to').value=today;$('from').value=new Date(Date.now()-29*864e5).toISOString().slice(0,10);
+const hang=d=>d>=85?'A':d>=70?'B':d>=50?'C':'D';
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parse=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const vn=s=>{const[y,m,d]=s.split('-');return `${d}/${m}/${y}`};
+const THU=['CN','T2','T3','T4','T5','T6','T7'];
+let ITEMS=[],KY='ngay';
+$('api').value=ls.get('api');$('tok').value=ls.get('tok');$('d').value=iso(new Date());
+if(!$('api').value)$('cfg').open=true;
+
+function diemTB(list){ // trung bình có trọng số theo phút, thiếu thì 30
+  if(!list.length)return 0;let t=0,w=0;
+  list.forEach(i=>{const ts=+i.thoi_gian_phut>0?+i.thoi_gian_phut:30;t+=(+i.diem)*ts;w+=ts});
+  return Math.round(t/w);
+}
+function khoang(){
+  const d=parse($('d').value);
+  if(KY==='ngay')return[d,d];
+  if(KY==='tuan'){const s=new Date(d);s.setDate(d.getDate()-((d.getDay()+6)%7));const e=new Date(s);e.setDate(s.getDate()+6);return[s,e]}
+  return[new Date(d.getFullYear(),d.getMonth(),1),new Date(d.getFullYear(),d.getMonth()+1,0)];
+}
+function tieuDe(s,e){
+  if(KY==='ngay')return`Ngày ${vn(iso(s))} (${THU[s.getDay()]})`;
+  if(KY==='tuan')return`Tuần ${vn(iso(s))} đến ${vn(iso(e))}`;
+  return`Tháng ${pad(s.getMonth()+1)}/${s.getFullYear()}`;
+}
 async function load(){
   ls.set('api',$('api').value.trim());ls.set('tok',$('tok').value);
-  if(!$('api').value)return $('st').textContent='Nhập URL Web App để tải dữ liệu.';
+  if(!$('api').value){$('st').textContent='Mở "Cấu hình" để nhập URL Web App và Token.';return render()}
   $('st').textContent='Đang tải...';
-  const q=new URLSearchParams({token:$('tok').value,from:$('from').value,to:$('to').value});
-  try{const r=await (await fetch($('api').value.trim()+'?'+q)).json();
-    if(!r.ok)throw new Error(r.error);DATA=r;render();$('st').textContent='Cập nhật lúc '+new Date().toLocaleString('vi-VN');
+  try{const r=await (await fetch($('api').value.trim()+'?'+new URLSearchParams({token:$('tok').value}))).json();
+    if(!r.ok)throw new Error(r.error);
+    ITEMS=r.items.map(i=>({...i,ngay:String(i.ngay).slice(0,10)}));
+    $('st').textContent='Dữ liệu cập nhật lúc '+new Date().toLocaleString('vi-VN');$('cfg').open=false;
   }catch(e){$('st').textContent='Lỗi: '+e.message}
+  render();
 }
 function render(){
-  const n=DATA.ngay, last=n[n.length-1]||{diem:0,hang:'D',so_viec:0,tong_phut:0};
-  const avg=n.length?Math.round(n.reduce((a,b)=>a+b.diem,0)/n.length):0;
-  const dem={A:0,B:0,C:0,D:0};DATA.items.forEach(i=>dem[i.hang]=(dem[i.hang]||0)+1);
-  $('kpi').innerHTML=[
-    [`${last.diem} ${g(last.hang)}`,'Điểm ngày gần nhất ('+(last.ngay||'')+')'],
-    [`${avg} ${g(avg>=85?'A':avg>=70?'B':avg>=50?'C':'D')}`,'Điểm trung bình kỳ'],
-    [DATA.items.length,'Tổng số việc'],
-    [(DATA.items.reduce((a,b)=>a+(+b.thoi_gian_phut||0),0)/60).toFixed(1)+'h','Tổng thời gian'],
-    [`${dem.A}/${dem.B}/${dem.C}/${dem.D}`,'Số việc hạng A/B/C/D']
-  ].map(([b,s])=>`<div class="c"><b>${b}</b><span>${s}</span></div>`).join('');
-  $('chart').innerHTML=n.map(d=>`<div class="col" title="${d.ngay}: ${d.diem} điểm, ${d.so_viec} việc">${d.diem}<i class="g${d.hang}" style="height:${d.diem}%"></i>${d.ngay.slice(8)}</div>`).join('')||'<span class="mu">Chưa có dữ liệu</span>';
-  const das=[...new Set(DATA.items.map(i=>i.du_an))].sort();
-  const cur=$('fda').value;$('fda').innerHTML='<option value="">Tất cả dự án</option>'+das.map(d=>`<option ${d===cur?'selected':''}>${esc(d)}</option>`).join('');
-  table();
+  const[s,e]=khoang(),a=iso(s),b=iso(e);
+  const list=ITEMS.filter(i=>i.ngay>=a&&i.ngay<=b).sort((x,y)=>x.ngay.localeCompare(y.ngay));
+  const diem=diemTB(list),h=list.length?hang(diem):'-';
+  const phut=list.reduce((t,i)=>t+(+i.thoi_gian_phut||0),0);
+  const dem={A:0,B:0,C:0,D:0};list.forEach(i=>dem[i.hang]=(dem[i.hang]||0)+1);
+  const xong=list.filter(i=>i.trang_thai==='hoan_thanh').length;
+  // biểu đồ: ngày = từng việc; tuần/tháng = từng ngày
+  let cols=[];
+  if(KY==='ngay')cols=list.map((i,n)=>({lb:'#'+(n+1),v:+i.diem,h:i.hang,t:i.viec}));
+  else for(let d=new Date(s);d<=e;d.setDate(d.getDate()+1)){
+    const k=iso(d),l=list.filter(i=>i.ngay===k),v=diemTB(l);
+    cols.push({lb:KY==='tuan'?THU[d.getDay()]:d.getDate(),v,h:l.length?hang(v):'',t:`${vn(k)}: ${l.length} việc`});
+  }
+  $('card').innerHTML=`
+  <h2>Báo cáo công việc | ${tieuDe(s,e)}</h2><div class="sub">Người báo cáo: Tung</div>
+  <div class="k">
+    <div><b>${list.length?diem:'-'} ${list.length?g(h):''}</b><span>Điểm ${KY==='ngay'?'ngày':KY==='tuan'?'tuần':'tháng'}</span></div>
+    <div><b>${list.length}</b><span>Số việc (${xong} hoàn thành)</span></div>
+    <div><b>${(phut/60).toFixed(1)}h</b><span>Tổng thời gian</span></div>
+    <div><b style="font-size:16px;padding-top:6px">${['A','B','C','D'].map(x=>g(x)+' '+dem[x]).join(' ')}</b><span>Phân bố hạng</span></div>
+  </div>
+  ${cols.length?`<div class="chart">${cols.map(c=>`<div class="col" title="${esc(c.t)}">${c.h?c.v:''}<i class="g${c.h||'X'}" style="height:${c.h?c.v:0}%"></i>${c.lb}</div>`).join('')}</div>`:''}
+  <div class="tbl"><table><thead><tr>${KY==='ngay'?'<th>#</th>':'<th>Ngày</th>'}<th>Dự án</th><th>Việc</th><th>Kết quả</th><th>Phút</th><th>Điểm</th><th>Hạng</th></tr></thead><tbody>
+  ${list.map((i,n)=>`<tr><td>${KY==='ngay'?n+1:vn(i.ngay).slice(0,5)}</td><td>${esc(i.du_an)}</td><td>${esc(i.viec)}</td><td>${esc(i.ket_qua)}</td><td>${esc(i.thoi_gian_phut)}</td><td>${esc(i.diem)}</td><td>${g(i.hang)}</td></tr>`).join('')
+   ||'<tr><td colspan="7" class="mu">Không có việc nào trong kỳ này</td></tr>'}
+  </tbody></table></div>
+  <div class="foot">Thang điểm 100: hoàn thành 30, đúng hạn 20, chất lượng 20, độ khó và tác động 20, sản phẩm bàn giao 10. Hạng A ≥ 85, B ≥ 70, C ≥ 50, D &lt; 50. Xuất lúc ${new Date().toLocaleString('vi-VN')}</div>`;
 }
-function table(){
-  const rows=DATA.items.filter(i=>(!$('fda').value||i.du_an===$('fda').value)&&(!$('fh').value||i.hang===$('fh').value))
-    .sort((a,b)=>String(b.ngay).localeCompare(a.ngay));
-  $('cnt').textContent=rows.length+' việc';
-  $('tb').innerHTML=rows.map(i=>`<tr><td>${esc(i.ngay)}</td><td>${esc(i.du_an)}</td><td>${i.link_chat?`<a href="${esc(i.link_chat)}" target="_blank">${esc(i.viec)}</a>`:esc(i.viec)}</td><td>${esc(i.ket_qua)}${i.san_pham?`<br><a class="mu" href="${esc(i.san_pham)}" target="_blank">sản phẩm</a>`:''}</td><td>${esc(i.thoi_gian_phut)}</td><td>${esc(i.diem)}</td><td>${g(i.hang)}</td></tr>`).join('');
-}
+function dich(n){const d=parse($('d').value);
+  if(KY==='ngay')d.setDate(d.getDate()+n);else if(KY==='tuan')d.setDate(d.getDate()+7*n);else d.setMonth(d.getMonth()+n,1);
+  $('d').value=iso(d);render()}
+$('seg').onclick=e=>{const k=e.target.dataset.k;if(!k)return;KY=k;[...$('seg').children].forEach(b=>b.classList.toggle('on',b===e.target));render()};
+$('prev').onclick=()=>dich(-1);$('next').onclick=()=>dich(1);$('d').onchange=render;
+$('today').onclick=()=>{$('d').value=iso(new Date());render()};
+$('go').onclick=load;
+$('png').onclick=async()=>{
+  if(!window.html2canvas)return alert('Chưa tải được thư viện xuất ảnh, kiểm tra mạng.');
+  const c=await html2canvas($('card'),{scale:2,backgroundColor:'#ffffff'});
+  const[s]=khoang(),a=document.createElement('a');
+  a.download=`bao-cao-${KY}-${KY==='thang'?iso(s).slice(0,7):iso(s)}.png`;a.href=c.toDataURL('image/png');a.click();
+};
 $('send').onclick=async()=>{
   try{const body=JSON.parse($('paste').value);body.token=$('tok').value;
     const u=$('api').value.trim()+'?'+new URLSearchParams({action:'add',data:JSON.stringify(body)});
     const r=await (await fetch(u)).json();
     $('sst').textContent=r.ok?'Đã gửi '+r.saved.length+' việc: '+r.saved.map(s=>s.hang).join(', '):'Lỗi: '+(r.error||JSON.stringify(r.errors));
-    if(r.ok){$('paste').value='';load();}
+    if(r.ok){$('paste').value='';load()}
   }catch(e){$('sst').textContent='Lỗi: '+e.message}};
-$('go').onclick=load;$('fda').onchange=table;$('fh').onchange=table;
-if($('api').value)load();
+render();if($('api').value)load();
 </script></body></html>
