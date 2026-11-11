@@ -3,17 +3,19 @@
 <title>Báo cáo công việc</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--tx:#1d2330;--mu:#6b7385;--bd:#e3e6ec;--pri:#2f6fdb;--A:#1f9d55;--B:#2f6fdb;--C:#d99a00;--D:#d64545}
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1d2330;--mu:#6b7385;--bd:#e3e6ec;--pri:#2f6fdb;--A:#1f9d55;--B:#2f6fdb;--C:#d99a00;--D:#d64545;--in:#fff}
+:root[data-theme="dark"]{--bg:#14171d;--card:#1d222b;--tx:#e8ebf0;--mu:#97a0b2;--bd:#2f3642;--pri:#4b86ea;--in:#262c37}
 *{box-sizing:border-box}body{margin:0;font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--tx)}
 .w{max-width:1000px;margin:auto;padding:16px}
-input,select,button,textarea{font:inherit;padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff;color:var(--tx)}
+input,select,button,textarea{font:inherit;padding:6px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--in);color:var(--tx)}
 button{cursor:pointer}.pri{background:var(--pri);color:#fff;border:0}
 .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
 details.c{margin-bottom:12px}summary{cursor:pointer;color:var(--mu)}
 .c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
 .seg{display:inline-flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden}
-.seg button{border:0;border-radius:0;background:#fff}.seg button.on{background:var(--pri);color:#fff}
-#card{background:#fff;padding:22px;border-radius:14px;border:1px solid var(--bd)}
+.seg button{border:0;border-radius:0;background:var(--in)}
+:root[data-theme="dark"] input[type=date]{color-scheme:dark}.seg button.on{background:var(--pri);color:#fff}
+#card{background:var(--card);padding:22px;border-radius:14px;border:1px solid var(--bd)}
 #card h2{margin:0;font-size:20px}#card .sub{color:var(--mu);margin-bottom:14px}
 .k{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
 .k div{border:1px solid var(--bd);border-radius:10px;padding:10px}.k b{display:block;font-size:24px}.k span{color:var(--mu);font-size:12px}
@@ -38,7 +40,8 @@ th{color:var(--mu);font-weight:600;font-size:12px}.tbl{overflow-x:auto}.mu{color
   <div class="seg" id="seg"><button data-k="ngay" class="on">Ngày</button><button data-k="tuan">Tuần</button><button data-k="thang">Tháng</button></div>
   <button id="prev">‹</button><input id="d" type="date"><button id="next">›</button>
   <button id="today">Hôm nay</button>
-  <button class="pri" id="png" style="margin-left:auto">Xuất ảnh PNG</button>
+  <button id="theme" style="margin-left:auto" title="Đổi giao diện sáng/tối">🌙 Tối</button>
+  <button class="pri" id="png">Xuất ảnh PNG</button>
 </div>
 
 <div id="card"></div>
@@ -101,7 +104,7 @@ function render(){
     cols.push({lb:KY==='tuan'?THU[d.getDay()]:d.getDate(),v,h:l.length?hang(v):'',t:`${vn(k)}: ${l.length} việc`});
   }
   $('card').innerHTML=`
-  <h2>Báo cáo công việc | ${tieuDe(s,e)}</h2><div class="sub">Người báo cáo: Tung</div>
+  <h2>Báo cáo công việc | ${tieuDe(s,e)}</h2><div class="sub">Người báo cáo: Ngô Đại Sơn</div>
   <div class="k">
     <div><b>${list.length?diem:'-'} ${list.length?g(h):''}</b><span>Điểm ${KY==='ngay'?'ngày':KY==='tuan'?'tuần':'tháng'}</span></div>
     <div><b>${list.length}</b><span>Số việc (${xong} hoàn thành)</span></div>
@@ -124,7 +127,7 @@ $('today').onclick=()=>{$('d').value=iso(new Date());render()};
 $('go').onclick=load;
 $('png').onclick=async()=>{
   if(!window.html2canvas)return alert('Chưa tải được thư viện xuất ảnh, kiểm tra mạng.');
-  const c=await html2canvas($('card'),{scale:2,backgroundColor:'#ffffff'});
+  const c=await html2canvas($('card'),{scale:2,backgroundColor:getComputedStyle($('card')).backgroundColor});
   const[s]=khoang(),a=document.createElement('a');
   a.download=`bao-cao-${KY}-${KY==='thang'?iso(s).slice(0,7):iso(s)}.png`;a.href=c.toDataURL('image/png');a.click();
 };
@@ -135,5 +138,8 @@ $('send').onclick=async()=>{
     $('sst').textContent=r.ok?'Đã gửi '+r.saved.length+' việc: '+r.saved.map(s=>s.hang).join(', '):'Lỗi: '+(r.error||JSON.stringify(r.errors));
     if(r.ok){$('paste').value='';load()}
   }catch(e){$('sst').textContent='Lỗi: '+e.message}};
+function setTheme(t){document.documentElement.dataset.theme=t;$('theme').textContent=t==='dark'?'☀️ Sáng':'🌙 Tối';ls.set('theme',t)}
+setTheme(ls.get('theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'));
+$('theme').onclick=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 render();if($('api').value)load();
 </script></body></html>
