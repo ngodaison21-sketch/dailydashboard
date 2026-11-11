@@ -167,7 +167,8 @@ function renderCN(){
   const gt=i=>(+i.diem||0)*(+i.tac_dong||3)/100/h(i);
   const top=[...list].sort((x,y)=>gt(y)-gt(x)).slice(0,Math.max(1,Math.ceil(list.length*0.2)));
   const noiseTop=list.filter(i=>i.signal==='noise').sort((x,y)=>h(y)-h(x)).slice(0,3);
-  const thieu=Object.keys(MT).filter(k=>gMT[k]===0);
+  // MT5 (sổ thu chi) là nhập liệu định kỳ, không theo dõi giờ nên không cảnh báo
+  const thieu=Object.keys(MT).filter(k=>k!=='MT5'&&gMT[k]===0);
   const goiY=[];
   if(coNhan.length<list.length)goiY.push(`${list.length-coNhan.length} việc chưa có nhãn phân tích (báo cáo cũ), chưa được tính vào tỷ lệ.`);
   if(pS&&pS<MUC_SIGNAL)goiY.push(`Thời gian signal ${pS}%, dưới mức tham chiếu ${MUC_SIGNAL}%.`);
