@@ -38,7 +38,7 @@ th{color:var(--mu);font-weight:600;font-size:12px}.tbl{overflow-x:auto}.mu{color
   <div class="bar" style="margin-top:6px"><button class="pri" id="send">Gửi lên Sheet</button><span class="mu" id="sst"></span></div>
 </details>
 
-<div class="bar"><div class="seg" id="tab"><button data-t="ld" class="on">Báo cáo lãnh đạo</button><button data-t="cn">🔒 Phát triển cá nhân</button></div></div>
+<div class="bar"><div class="seg" id="tab"><button data-t="ld" class="on">Báo cáo lãnh đạo</button><button data-t="cn">🔒 Phát triển cá nhân</button><button data-t="tc">🔒 Tài chính</button></div></div>
 <div class="bar">
   <div class="seg" id="seg"><button data-k="ngay" class="on">Ngày</button><button data-k="tuan">Tuần</button><button data-k="thang">Tháng</button></div>
   <button id="prev">‹</button><input id="d" type="date"><button id="next">›</button>
@@ -107,8 +107,9 @@ async function load(){
   render();
 }
 function render(){
-  $('png').style.display=TAB==='cn'?'none':'';
+  $('png').style.display=TAB==='ld'?'':'none';
   if(TAB==='cn')return renderCN();
+  if(TAB==='tc')return renderTC();
   const[s,e]=khoang(),a=iso(s),b=iso(e);
   const list=ITEMS.filter(i=>i.ngay>=a&&i.ngay<=b&&!laRT(i)).sort((x,y)=>x.ngay.localeCompare(y.ngay));
   const nLV=KY==='ngay'?1:soNgayLV(s,e,list),K=chamKy(list,nLV),diem=K.diem,h=list.length?hang(diem):'-';
@@ -144,8 +145,107 @@ function dich(n){const d=parse($('d').value);
 $('seg').onclick=e=>{const k=e.target.dataset.k;if(!k)return;KY=k;[...$('seg').children].forEach(b=>b.classList.toggle('on',b===e.target));render()};
 $('prev').onclick=()=>dich(-1);$('next').onclick=()=>dich(1);$('d').onchange=render;
 $('today').onclick=()=>{$('d').value=iso(new Date());render()};
-$('go').onclick=load;
+$('go').onclick=()=>{TC=null;TC_LOI='';load()};
 $('tab').onclick=e=>{const t=e.target.dataset.t;if(!t)return;TAB=t;[...$('tab').children].forEach(b=>b.classList.toggle('on',b===e.target));render()};
+
+/* ===== Tab Tài chính cá nhân (chỉ đọc file Sổ thu chi, không xuất ảnh) =====
+ * Mô hình: quy tắc 50/30/20 (Elizabeth Warren), tỷ lệ tiết kiệm (FIRE), quỹ dự phòng 3 đến 6 tháng chi,
+ * kiểm soát ngân sách theo nhịp ngày (budget pacing), dự phóng mục tiêu theo lãi kép, Pareto khoản chi,
+ * "latte factor" (khoản nhỏ lặp lại), cân bằng tài sản (tỷ trọng chứng khoán theo ngưỡng tự đặt). */
+let TC=null,TC_LOI='';
+const so=v=>{v=String(v??'').replace(/[^\d,.\-]/g,'');if(!v)return 0;if(/,\d+$/.test(v)&&!/\.\d{3}$/.test(v))v=v.replace(/\./g,'').replace(',','.');else v=v.replace(/[.,]/g,'');return +v||0};
+const pctSo=v=>{const t=String(v??'').replace('%','').replace(',','.');return (+t||0)/100};
+const vnd=n=>Math.round(n).toLocaleString('vi-VN')+' đ';
+const trieu=n=>(n/1e6).toLocaleString('vi-VN',{maximumFractionDigits:1})+' tr';
+function kv(raw,nhan){ // ưu tiên ô khớp đúng nhãn, sau đó mới khớp phần đầu
+  const tim=eq=>{for(const r of raw)for(let c=0;c<r.length;c++){const x=String(r[c]).trim().toLowerCase(),n=nhan.toLowerCase();
+    if(eq?x===n:x.startsWith(n)){for(let k=c+1;k<r.length;k++)if(String(r[k]).trim()!=='')return r[k];}}return''};
+  return tim(true)||tim(false)}
+function kvCu(raw,nhan){for(const r of raw)for(let c=0;c<r.length;c++)if(String(r[c]).trim().toLowerCase().startsWith(nhan.toLowerCase())){for(let k=c+1;k<r.length;k++)if(String(r[k]).trim()!=='')return r[k];}return''}
+const CO_DINH=/phòng|nhà|học phí|bảo hiểm|internet|điện thoại|thuê/i; // chi cố định: không tính theo nhịp ngày
+const THIET_YEU=['tiền phòng','ăn uống','đi lại','đồ sinh hoạt','sức khỏe','học','điện','nước'];
+async function taiTC(){
+  if(!$('tokcn').value){TC_LOI='Cần nhập Token cá nhân trong mục Cấu hình.';return}
+  try{const r=await (await fetch($('api').value.trim()+'?'+new URLSearchParams({action:'taichinh',token_cn:$('tokcn').value}))).json();
+    if(!r.ok)throw new Error(r.error);TC=r;TC_LOI=''}catch(e){TC_LOI='Lỗi tải tài chính: '+e.message}
+}
+function phanTichTC(tc,thang,homNay){ // thang = 'YYYY-MM'; trả về số liệu đã tính (hàm thuần, dễ kiểm thử)
+  const gd=tc.giao_dich.filter(g=>g.ngay.slice(0,7)===thang);
+  const laNap=g=>/^nạp tk/i.test(g.danh_muc),laRut=g=>/^rút tk/i.test(g.danh_muc);
+  const thu=gd.filter(g=>g.loai==='Thu').reduce((t,g)=>t+g.so_tien,0);
+  const chiL=gd.filter(g=>g.loai==='Chi');const chi=chiL.reduce((t,g)=>t+g.so_tien,0);
+  const tk=gd.filter(laNap).reduce((t,g)=>t+g.so_tien,0)-gd.filter(laRut).reduce((t,g)=>t+g.so_tien,0);
+  const theoDM={};chiL.forEach(g=>theoDM[g.danh_muc]=(theoDM[g.danh_muc]||0)+g.so_tien);
+  const thietYeu=Object.entries(theoDM).filter(([k])=>THIET_YEU.some(x=>k.toLowerCase().includes(x))).reduce((t,[,v])=>t+v,0);
+  const muonMua=chi-thietYeu;
+  // nhịp ngân sách
+  const [y,m]=thang.split('-').map(Number),soNgay=new Date(y,m,0).getDate();
+  const daQua=homNay.slice(0,7)===thang?+homNay.slice(8,10):(homNay.slice(0,7)>thang?soNgay:0);
+  const ns=tc.ngan_sach||[];let hdr=-1,cot=-1;ns.forEach((r,i)=>{const c=r.indexOf(pad(m)+'/'+y);if(c>0&&hdr<0){hdr=i;cot=c}});
+  const nganSach={};if(hdr>=0)ns.slice(hdr+1).forEach(r=>{if(r[0]&&so(r[cot]))nganSach[String(r[0]).trim()]=so(r[cot])});
+  const dsDM=[...new Set([...Object.keys(theoDM),...Object.keys(nganSach).filter(k=>!/thu nhập|tiết kiệm|cân đối|tổng/i.test(k))])];
+  const bang=dsDM.map(k=>{const ns_=nganSach[k]||0,tt=theoDM[k]||0,kv_=daQua?ns_*daQua/soNgay:0;
+    const cd=CO_DINH.test(k);return{dm:k,ns:ns_,tt,tyLe:ns_?tt/ns_:0,nhip:!cd&&kv_?tt/kv_:0,coDinh:cd}}).sort((a,b)=>b.tt-a.tt);
+  // dự phóng cuối tháng: khoản cố định lấy max(thực tế, ngân sách), khoản biến đổi ngoại suy theo ngày
+  const duPhong=daQua?bang.reduce((s,b)=>s+(b.coDinh?Math.max(b.tt,b.ns):b.tt/daQua*soNgay),0):0;
+  const nho=chiL.filter(g=>g.so_tien<50000);
+  // tài sản, mục tiêu
+  const t=tc.tiet_kiem||[],mucTieu=so(kv(t,'Mục tiêu')),dangCo=so(kv(t,'Đang có')),canMoiThang=so(kv(t,'Cần tiết kiệm đều'));
+  const thangCon=so(kv(t,'Số tháng còn lại'));const lai=pctSo(kv(tc.cai_dat||[],'Lãi suất'));
+  const r_=lai/12,fv=(pv,pmt,n)=>r_?pv*Math.pow(1+r_,n)+pmt*(Math.pow(1+r_,n)-1)/r_:pv+pmt*n;
+  const duPhongMT=thangCon?fv(dangCo,Math.max(tk,0),thangCon):0;
+  const dt=tc.dau_tu||[],tongTS=so(kv(dt,'TỔNG TÀI SẢN TÍCH LŨY')),tyCK=pctSo(kv(dt,'Tỷ trọng chứng khoán'));
+  const danhGiaCK=[...new Set(dt.flatMap(r=>r.slice(6)).filter(x=>/ĐẠT|LỖ|LÃI|Tập trung|nên/i.test(x)))];
+  // chi bình quân 3 tháng gần nhất để tính quỹ dự phòng
+  const cacThang=[...new Set(tc.giao_dich.map(g=>g.ngay.slice(0,7)))].filter(x=>x<=thang).sort().slice(-3);
+  const chiBQ=cacThang.length?cacThang.map(th=>tc.giao_dich.filter(g=>g.ngay.slice(0,7)===th&&g.loai==='Chi').reduce((s,g)=>s+g.so_tien,0)).reduce((a,b)=>a+b,0)/cacThang.length:0;
+  const tienMat=so(kv(t,'Tiền mặt'))||0, quyDP=chiBQ?(dangCo+tienMat)/chiBQ:0;
+  const xuHuong=[...new Set(tc.giao_dich.map(g=>g.ngay.slice(0,7)))].sort().slice(-6).map(th=>{const l=tc.giao_dich.filter(g=>g.ngay.slice(0,7)===th);
+    return{th,thu:l.filter(g=>g.loai==='Thu').reduce((s,g)=>s+g.so_tien,0),chi:l.filter(g=>g.loai==='Chi').reduce((s,g)=>s+g.so_tien,0),
+      tk:l.filter(laNap).reduce((s,g)=>s+g.so_tien,0)-l.filter(laRut).reduce((s,g)=>s+g.so_tien,0)}});
+  return{thu,chi,tk,tyLeTK:thu?tk/thu:0,thietYeu,muonMua,bang,soNgay,daQua,duPhong,nho:{n:nho.length,tong:nho.reduce((s,g)=>s+g.so_tien,0)},
+    top:[...chiL].sort((a,b)=>b.so_tien-a.so_tien).slice(0,5),mucTieu,dangCo,canMoiThang,thangCon,duPhongMT,tongTS,tyCK,danhGiaCK,chiBQ,quyDP,xuHuong,
+    nganSachTong:Object.entries(nganSach).filter(([k])=>!/thu nhập|tiết kiệm|cân đối|tổng/i.test(k)).reduce((s,[,v])=>s+v,0),
+    nsThu:so(Object.entries(nganSach).find(([k])=>/thu nhập/i.test(k))?.[1]),nsTK:so(Object.entries(nganSach).find(([k])=>/tiết kiệm/i.test(k))?.[1])};
+}
+async function renderTC(){
+  if(!TC&&!TC_LOI){$('card').innerHTML='<p class="mu">Đang tải dữ liệu tài chính...</p>';await taiTC()}
+  if(TC_LOI){$('card').innerHTML=`<p class="mu">${esc(TC_LOI)}</p>`;return}
+  const d=parse($('d').value),thang=`${d.getFullYear()}-${pad(d.getMonth()+1)}`,A=phanTichTC(TC,thang,iso(new Date()));
+  const p=x=>Math.round(x*100)+'%',tile=(v,l,cls='')=>`<div><b class="${cls}">${v}</b><span>${l}</span></div>`;
+  const tong=A.thu||1,nY=A.thietYeu/tong,wN=A.muonMua/tong,sV=A.tk/tong;
+  const nx=[];
+  if(A.thu){nx.push(`Tỷ lệ tiết kiệm ${p(A.tyLeTK)}${A.tyLeTK>=0.5?': rất tốt, vượt chuẩn 20% của quy tắc 50/30/20.':A.tyLeTK>=0.2?': đạt chuẩn 20%.':': dưới chuẩn 20%.'}`)}
+  if(A.daQua&&A.nganSachTong){const r=A.duPhong/A.nganSachTong;nx.push(`Theo nhịp chi hiện tại, cuối tháng dự kiến chi ${trieu(A.duPhong)} (${p(r)} ngân sách)${r>1?', cần giảm tốc.':'.'}`)}
+  A.bang.filter(b=>b.ns&&b.nhip>1.15).slice(0,3).forEach(b=>nx.push(`${esc(b.dm)} đang chi nhanh hơn nhịp ngân sách ${p(b.nhip-1)}.`));
+  if(A.nho.n>=10)nx.push(`${A.nho.n} khoản nhỏ dưới 50.000 đ, cộng lại ${vnd(A.nho.tong)}: đây là "latte factor", dễ cắt mà không ảnh hưởng chất lượng sống.`);
+  if(A.canMoiThang&&A.tk<A.canMoiThang)nx.push(`Mục tiêu 300 triệu cần ${trieu(A.canMoiThang)}/tháng; tháng này mới nạp ròng ${trieu(A.tk)}. Theo nhịp này và lãi suất trong Cài đặt, đến hạn ước đạt ${trieu(A.duPhongMT)}.`);
+  if(A.quyDP&&A.quyDP<3)nx.push(`Quỹ dự phòng đủ ${A.quyDP.toFixed(1)} tháng chi tiêu, dưới mức 3 đến 6 tháng khuyến nghị.`);
+  if(A.tyCK>0.3)nx.push(`Chứng khoán chiếm ${p(A.tyCK)} tổng tài sản tích lũy, vượt ngưỡng 30% bạn tự đặt.`);
+  const maxX=Math.max(1,...A.xuHuong.flatMap(x=>[x.thu,x.chi]));
+  $('card').innerHTML=`
+  <h2>🔒 Tài chính cá nhân | Tháng ${pad(d.getMonth()+1)}/${d.getFullYear()}</h2><div class="sub">Chỉ mình bạn xem. Dữ liệu đọc trực tiếp từ file Sổ thu chi${A.daQua&&A.daQua<A.soNgay?`, đã qua ${A.daQua}/${A.soNgay} ngày`:''}.</div>
+  <div class="k">${tile(trieu(A.thu),'Thu nhập'+(A.nsThu?' / kế hoạch '+trieu(A.nsThu):''))}${tile(trieu(A.chi),'Chi tiêu'+(A.nganSachTong?' / ngân sách '+trieu(A.nganSachTong):''))}
+  ${tile(p(A.tyLeTK),'Tỷ lệ tiết kiệm ('+trieu(A.tk)+')')}${tile(A.quyDP?A.quyDP.toFixed(1)+' tháng':'-','Quỹ dự phòng (chuẩn 3 đến 6)')}
+  ${tile(A.mucTieu?p(A.dangCo/A.mucTieu):'-','Tiến độ '+trieu(A.mucTieu||0)+' ('+trieu(A.dangCo)+')')}${tile(A.tongTS?trieu(A.tongTS):'-','Tổng tài sản tích lũy')}</div>
+  <div style="margin-bottom:14px"><b>Quy tắc 50/30/20</b> <span class="mu">(thiết yếu / mong muốn / tiết kiệm, tính trên thu nhập)</span>
+   <div style="display:flex;height:22px;border-radius:6px;overflow:hidden;margin:6px 0;font-size:11px;color:#fff">
+    <div style="width:${Math.max(0,nY*100)}%;background:var(--B);padding:3px 6px">Thiết yếu ${p(nY)}</div>
+    <div style="width:${Math.max(0,wN*100)}%;background:var(--C);padding:3px 6px">Mong muốn ${p(wN)}</div>
+    <div style="width:${Math.max(0,sV*100)}%;background:var(--A);padding:3px 6px">Tiết kiệm ${p(sV)}</div></div>
+   <span class="mu" style="font-size:12px">Chuẩn tham chiếu 50 / 30 / 20. Mục tiêu riêng của bạn là tiết kiệm khoảng 50% thu nhập.</span></div>
+  <div style="margin-bottom:14px"><b>Nhận xét tự động</b><ul>${nx.map(x=>'<li>'+x+'</li>').join('')||'<li class="mu">Chưa đủ dữ liệu.</li>'}</ul></div>
+  <div class="tbl" style="margin-bottom:14px"><b>Ngân sách theo nhóm</b><table><thead><tr><th>Nhóm</th><th>Ngân sách</th><th>Thực tế</th><th>% dùng</th><th>So với nhịp ngày</th></tr></thead><tbody>
+  ${A.bang.map(b=>`<tr><td>${esc(b.dm)}</td><td>${b.ns?vnd(b.ns):'-'}</td><td>${vnd(b.tt)}</td><td>${b.ns?p(b.tyLe):'-'}</td><td>${b.coDinh?'Khoản cố định':b.ns&&A.daQua?(b.nhip>1.15?'<span style="color:var(--D)">Nhanh '+p(b.nhip-1)+'</span>':b.nhip<0.85?'Chậm hơn nhịp':'Đúng nhịp'):'-'}</td></tr>`).join('')}
+  </tbody></table></div>
+  <div class="k" style="grid-template-columns:1fr 1fr">
+   <div><span>5 khoản chi lớn nhất (Pareto)</span>${A.top.map(g=>`<div style="font-size:12px;margin-top:4px">${vn(g.ngay).slice(0,5)} · ${esc(g.noi_dung)} <b style="display:inline;font-size:12px">${vnd(g.so_tien)}</b></div>`).join('')||'<div class="mu">Không có</div>'}</div>
+   <div><span>Xu hướng 6 tháng (thu / chi / tiết kiệm)</span>${A.xuHuong.map(x=>`<div style="font-size:11px;margin-top:6px">${x.th.slice(5)}/${x.th.slice(2,4)}
+     <i style="display:block;height:6px;background:var(--B);width:${Math.round(150*x.thu/maxX)}px"></i><i style="display:block;height:6px;background:var(--D);width:${Math.round(150*x.chi/maxX)}px"></i><i style="display:block;height:6px;background:var(--A);width:${Math.round(150*Math.max(0,x.tk)/maxX)}px"></i></div>`).join('')}</div>
+  </div>
+  ${A.danhGiaCK.length?`<div><b>Đầu tư chứng khoán</b> <span class="mu">(đánh giá từ sheet Đầu tư CK)</span><ul>${A.danhGiaCK.map(x=>'<li>'+esc(x)+'</li>').join('')}</ul></div>`:''}
+  <div class="foot">Mô hình: quy tắc 50/30/20, tỷ lệ tiết kiệm, quỹ dự phòng 3 đến 6 tháng chi, nhịp ngân sách theo ngày, dự phóng mục tiêu theo lãi kép, Pareto khoản chi, latte factor, tỷ trọng tài sản. Thiết yếu gồm: Tiền phòng, Ăn uống, Đi lại, Đồ sinh hoạt, Sức khỏe; các nhóm chi khác tính là mong muốn. Đây là công cụ theo dõi, không phải tư vấn đầu tư.</div>`;
+}
 
 /* ===== Tab Phát triển cá nhân: Signal/Noise, Deep Work, Eisenhower, mục tiêu, Pareto ===== */
 const MT={MT1:'Quản trị dự án và đối tác',MT2:'Digital Products',MT3:'Bắn cung, lái xe',MT4:'Chứng khoán',MT5:'Tiết kiệm, thu chi',MT6:'Học thuật, du học Phần Lan'};
